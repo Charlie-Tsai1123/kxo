@@ -9,6 +9,9 @@
 #include <linux/sysfs.h>
 #include <linux/version.h>
 #include <linux/workqueue.h>
+#if defined(CONFIG_X86)
+#include <linux/vmalloc.h>
+#endif
 
 #include "game.h"
 #include "mcts.h"
@@ -139,8 +142,8 @@ static int draw_board(char *table)
         draw_buffer[i++] = '\n';
         smp_wmb();
     }
-
-
+    draw_buffer[i - 1] = '\0';
+    smp_wmb();
     return 0;
 }
 
