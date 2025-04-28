@@ -80,7 +80,8 @@ static int major;
 static struct class *kxo_class;
 static struct cdev kxo_cdev;
 
-static char draw_buffer[DRAWBUFFER_SIZE];
+// static char draw_buffer[DRAWBUFFER_SIZE];
+static unsigned int draw_buffer;
 
 /* Data are stored into a kfifo buffer before passing them to the userspace */
 static DECLARE_KFIFO_PTR(rx_fifo, unsigned char);
@@ -97,7 +98,8 @@ static DECLARE_WAIT_QUEUE_HEAD(rx_wait);
 /* Insert the whole chess board into the kfifo buffer */
 static void produce_board(void)
 {
-    unsigned int len = kfifo_in(&rx_fifo, draw_buffer, sizeof(draw_buffer));
+    unsigned int len = kfifo_in(&rx_fifo, (const unsigned char *) &draw_buffer,
+                                sizeof(draw_buffer));
     if (unlikely(len < sizeof(draw_buffer)) && printk_ratelimit())
         pr_warn("%s: %zu bytes dropped\n", __func__, sizeof(draw_buffer) - len);
 
@@ -122,27 +124,35 @@ static char table[N_GRIDS];
 /* Draw the board into draw_buffer */
 static int draw_board(char *table)
 {
-    int i = 0, k = 0;
-    draw_buffer[i++] = '\n';
-    smp_wmb();
-    draw_buffer[i++] = '\n';
-    smp_wmb();
+    // int i = 0, k = 0;
+    // draw_buffer[i++] = '\n';
+    // smp_wmb();
+    // draw_buffer[i++] = '\n';
+    // smp_wmb();
 
-    while (i < DRAWBUFFER_SIZE) {
-        for (int j = 0; j < (BOARD_SIZE << 1) - 1 && k < N_GRIDS; j++) {
-            draw_buffer[i++] = j & 1 ? '|' : table[k++];
-            smp_wmb();
-        }
-        draw_buffer[i++] = '\n';
-        smp_wmb();
-        for (int j = 0; j < (BOARD_SIZE << 1) - 1; j++) {
-            draw_buffer[i++] = '-';
-            smp_wmb();
-        }
-        draw_buffer[i++] = '\n';
-        smp_wmb();
+    // while (i < DRAWBUFFER_SIZE) {
+    //     for (int j = 0; j < (BOARD_SIZE << 1) - 1 && k < N_GRIDS; j++) {
+    //         draw_buffer[i++] = j & 1 ? '|' : table[k++];
+    //         smp_wmb();
+    //     }
+    //     draw_buffer[i++] = '\n';
+    //     smp_wmb();
+    //     for (int j = 0; j < (BOARD_SIZE << 1) - 1; j++) {
+    //         draw_buffer[i++] = '-';
+    //         smp_wmb();
+    //     }
+    //     draw_buffer[i++] = '\n';
+    //     smp_wmb();
+    // }
+    // draw_buffer[i - 1] = '\0';
+    // smp_wmb();
+    int i = 0, k = 0;
+    draw_buffer = 0;
+    smp_wmb();
+    while (i < N_GRIDS) {
+        draw_buffer |= ((table[k++] >> 4) & 3) << (i << 1);
+        i++;
     }
-    draw_buffer[i - 1] = '\0';
     smp_wmb();
     return 0;
 }
