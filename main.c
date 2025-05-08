@@ -3,12 +3,16 @@
 #include <linux/cdev.h>
 #include <linux/circ_buf.h>
 #include <linux/interrupt.h>
+#include <linux/io.h>
+#include <linux/ioctl.h>
 #include <linux/kfifo.h>
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/sysfs.h>
+#include <linux/uaccess.h>
 #include <linux/version.h>
 #include <linux/workqueue.h>
+
 #if defined(CONFIG_X86)
 #include <linux/vmalloc.h>
 #endif
@@ -31,6 +35,11 @@ MODULE_DESCRIPTION("In-kernel Tic-Tac-Toe game engine");
 #define DEV_NAME "kxo"
 
 #define NR_KMLDRV 1
+
+#define MY_IOCTL_MAGIC_MCTS 'O'
+#define MY_IOCTL_MCTS _IOWR(MY_IOCTL_MAGIC_MCTS, 1, unsigned int)
+#define MY_IOCTL_MAGIC_NEGAMAX 'X'
+#define MY_IOCTL_NEGAMAX _IOWR(MY_IOCTL_MAGIC_NEGAMAX, 1, unsigned int)
 
 static int delay = 100; /* time (in ms) to generate an event */
 
@@ -429,12 +438,61 @@ static int kxo_release(struct inode *inode, struct file *filp)
     return 0;
 }
 
+void int_to_table(unsigned int int_table, char *table)
+{
+    const char mapping[3] = {'O', 'X', ' '};
+    for (int i = 0; i < N_GRIDS; i++) {
+        table[i] = mapping[int_table & 3];
+        int_table >>= 2;
+    }
+}
+
+static long kxo_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+{
+    unsigned int value;
+    char user_table[N_GRIDS];
+
+    if (_IOC_TYPE(cmd) != MY_IOCTL_MAGIC_MCTS &&
+        _IOC_TYPE(cmd) != MY_IOCTL_MAGIC_NEGAMAX)
+        return -ENOTTY;
+
+    switch (cmd) {
+    case MY_IOCTL_MCTS:
+        if (copy_from_user(&value, (unsigned int __user *) arg,
+                           sizeof(unsigned int)))
+            return -EFAULT;
+
+        int_to_table(value, user_table);
+        value = mcts(user_table, 'O');
+        if (copy_to_user((unsigned int __user *) arg, &value,
+                         sizeof(unsigned int)))
+            return -EFAULT;
+
+        return 0;
+    case MY_IOCTL_NEGAMAX:
+        if (copy_from_user(&value, (unsigned int __user *) arg,
+                           sizeof(unsigned int)))
+            return -EFAULT;
+
+        int_to_table(value, user_table);
+        value = negamax_predict(user_table, 'X').move;
+        if (copy_to_user((unsigned int __user *) arg, &value,
+                         sizeof(unsigned int)))
+            return -EFAULT;
+        return 0;
+    default:
+        return -EINVAL;
+    }
+}
+
+
 static const struct file_operations kxo_fops = {
     .read = kxo_read,
     .llseek = no_llseek,
     .open = kxo_open,
     .release = kxo_release,
     .owner = THIS_MODULE,
+    .unlocked_ioctl = kxo_ioctl,
 };
 
 static int __init kxo_init(void)

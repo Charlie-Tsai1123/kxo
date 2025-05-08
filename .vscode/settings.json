@@ -1,5 +1,9 @@
 {
     "files.associations": {
-        "game.h": "c"
+        "game.h": "c",
+        "signal.h": "c",
+        "version.h": "c",
+        "cstdlib": "c",
+        "list.h": "c"
     }
 }
